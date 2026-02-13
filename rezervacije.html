@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="sl">
+<head>
+<meta charset="UTF-8">
+<title>Rezervacija miz</title>
+<style>
+body {
+    font-family: Arial, sans-serif;
+    background: #f4f4f4;
+    text-align: center;
+}
+
+#floorplan {
+    position: relative;
+    display: inline-block;
+    margin-top: 20px;
+}
+
+#floorplan img {
+    width: 900px;
+}
+
+.desk {
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    cursor: pointer;
+    border-radius: 6px;
+    color: white;
+    font-size: 14px;
+    user-select: none;
+}
+
+.free { background-color: green; }
+.daily { background-color: blue; }
+.temporary { background-color: orange; }
+.long { background-color: red; }
+
+#controls {
+    margin-top: 20px;
+}
+
+#modal {
+    display: none;
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.5);
+    align-items: center;
+    justify-content: center;
+}
+
+#modalContent {
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    width: 300px;
+    text-align: left;
+}
+</style>
+</head>
+<body>
+
+<h1>Sistem rezervacije miz</h1>
+
+<div id="controls">
+    <button onclick="toggleEditMode()">Uredi postavitev</button>
+</div>
+
+<div id="floorplan">
+    <img src="tloris.png" alt="Tloris">
+</div>
+
+<div id="modal">
+    <div id="modalContent">
+        <h3 id="deskTitle"></h3>
+        <p id="deskInfo"></p>
+
+        <label>Ime:</label><br>
+        <input type="text" id="name"><br><br>
+
+        <label>Od:</label><br>
+        <input type="date" id="dateFrom"><br><br>
+
+        <label>Do:</label><br>
+        <input type="date" id="dateTo"><br><br>
+
+        <button onclick="reserveDesk()">Rezerviraj</button>
+        <button onclick="cancelReservation()">Prekini rezervacijo</button>
+        <button onclick="closeModal()">Zapri</button>
+    </div>
+</div>
+
+<script>
+const totalDesks = 22;
+let reservations = JSON.parse(localStorage.getItem("reservations")) || {};
+let positions = JSON.parse(localStorage.getItem("positions")) || {};
+let selectedDesk = null;
+let editMode = false;
+let draggedDesk = null;
+
+const floorplan = document.getElementById("floorplan");
+
+function createDesks() {
+    for (let i = 1; i <= totalDesks; i++) {
+        const desk = document.createElement("div");
+        desk.classList.add("desk");
+        desk.dataset.id = i;
+        desk.innerText = i;
+
+        const pos = positions[i] || { top: 50 + i*5, left: 50 + i*5 };
+        desk.style.top = pos.top + "px";
+        desk.style.left = pos.left + "px";
+
+        desk.addEventListener("click", () => {
+            if (!editMode) openModal(i);
+        });
+
+        desk.addEventListener("mousedown", (e) => {
+            if (!editMode) return;
+            draggedDesk = desk;
+        });
+
+        floorplan.appendChild(desk);
+    }
+}
+
+document.addEventListener("mousemove", (e) => {
+    if (!draggedDesk) return;
+
+    const rect = floorplan.getBoundingClientRect();
+    draggedDesk.style.left = (e.clientX - rect.left - 20) + "px";
+    draggedDesk.style.top = (e.clientY - rect.top - 20) + "px";
+});
+
+document.addEventListener("mouseup", () => {
+    if (draggedDesk) {
+        positions[draggedDesk.dataset.id] = {
+            top: parseInt(draggedDesk.style.top),
+            left: parseInt(draggedDesk.style.left)
+        };
+        localStorage.setItem("positions", JSON.stringify(positions));
+    }
+    draggedDesk = null;
+});
+
+function toggleEditMode() {
+    editMode = !editMode;
+    alert(editMode ? "Edit mode VKLOPLJEN" : "Edit mode IZKLOPLJEN");
+}
+
+function getStatusClass(reservation) {
+    if (!reservation) return "free";
+    const from = new Date(reservation.from);
+    const to = new Date(reservation.to);
+    const diffDays = (to - from) / (1000*60*60*24) + 1;
+    if (diffDays === 1) return "daily";
+    if (diffDays <= 14) return "temporary";
+    return "long";
+}
+
+function renderStatuses() {
+    document.querySelectorAll(".desk").forEach(desk => {
+        const id = desk.dataset.id;
+        desk.classList.remove("free","daily","temporary","long");
+        desk.classList.add(getStatusClass(reservations[id]));
+    });
+}
+
+function openModal(id) {
+    selectedDesk = id;
+    const reservation = reservations[id];
+
+    document.getElementById("deskTitle").innerText = "Miza " + id;
+    document.getElementById("deskInfo").innerText = reservation
+        ? "Rezerviral: " + reservation.name + "\nOd: " + reservation.from + "\nDo: " + reservation.to
+        : "Miza je prosta.";
+
+    document.getElementById("modal").style.display = "flex";
+}
+
+function closeModal() {
+    document.getElementById("modal").style.display = "none";
+}
+
+function reserveDesk() {
+    const name = document.getElementById("name").value;
+    const from = document.getElementById("dateFrom").value;
+    const to = document.getElementById("dateTo").value;
+
+    if (!name || !from || !to) {
+        alert("Izpolni vsa polja!");
+        return;
+    }
+
+    reservations[selectedDesk] = { name, from, to };
+    localStorage.setItem("reservations", JSON.stringify(reservations));
+    renderStatuses();
+    closeModal();
+}
+
+function cancelReservation() {
+    delete reservations[selectedDesk];
+    localStorage.setItem("reservations", JSON.stringify(reservations));
+    renderStatuses();
+    closeModal();
+}
+
+createDesks();
+renderStatuses();
+</script>
+
+</body>
+</html>
