@@ -1,218 +1,892 @@
 <!DOCTYPE html>
 <html lang="sl">
 <head>
-<meta charset="UTF-8">
-<title>Rezervacija miz</title>
-<style>
-body {
-    font-family: Arial, sans-serif;
-    background: #f4f4f4;
-    text-align: center;
-}
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Rezervacije - STIK</title>
+    
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/sl.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-database-compat.js"></script>
 
-#floorplan {
-    position: relative;
-    display: inline-block;
-    margin-top: 20px;
-}
+    <style>
+        :root {
+            --primary: #667eea;
+            --success: #2ecc71;
+            --warning: #f1c40f;
+            --danger: #e74c3c;
+            --pilot: #3498db;
+        }
 
-#floorplan img {
-    width: 900px;
-}
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
+        body { background: #1a1a2e; overflow: hidden; height: 100vh; }
 
-.desk {
-    position: absolute;
-    width: 40px;
-    height: 40px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: bold;
-    cursor: pointer;
-    border-radius: 6px;
-    color: white;
-    font-size: 14px;
-    user-select: none;
-}
+        #app-wrapper { 
+            display: flex; 
+            flex-direction: column; 
+            height: 100vh; 
+            background: linear-gradient(135deg, rgba(220, 20, 60, 0.85) 0%, rgba(178, 34, 34, 0.9) 100%);
+        }
+        
+        #admin-panel { 
+            display: flex; 
+            align-items: center; 
+            justify-content: space-between; 
+            padding: 8px 15px; 
+            background: rgba(255,255,255,0.98); 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2); 
+            border-bottom: 1px solid rgba(0,0,0,0.1);
+            z-index: 100;
+        }
+        
+        .logo-area {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .logo-area img {
+            height: 40px;
+            width: auto;
+            border-radius: 5px;
+        }
+        
+        .logo-area span {
+            font-weight: bold;
+            color: #333;
+            font-size: 18px;
+        }
+        
+        @media (max-width: 480px) {
+            .logo-area img {
+                height: 32px;
+            }
+            .logo-area span {
+                font-size: 16px;
+            }
+        }
 
-.free { background-color: green; }
-.daily { background-color: blue; }
-.temporary { background-color: orange; }
-.long { background-color: red; }
+        #floorplan-container { 
+            flex-grow: 1; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            overflow: auto; 
+            position: relative; 
+            padding: 10px;
+            width: 100%;
+        }
+        
+        #floorplan-wrap { 
+            position: relative; 
+            display: inline-block;
+            line-height: 0;
+            touch-action: none;
+            background: white; 
+            border-radius: 15px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        
+        #floorplan-img { 
+            max-width: 98vw; 
+            max-height: 85vh;
+            width: auto; 
+            height: auto;
+            border-radius: 15px; 
+            pointer-events: none;
+            display: block;
+        }
 
-#controls {
-    margin-top: 20px;
-}
+        .desk { 
+            position: absolute; 
+            width: 26px; 
+            height: 26px;
+            border-radius: 50%; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            color: white; 
+            font-weight: bold; 
+            border: 2px solid white; 
+            font-size: 11px; 
+            z-index: 50; 
+            transform: translate(-50%, -50%);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        
+        @media (max-width: 768px) {
+            #floorplan-img { 
+                max-height: 80vh;
+            }
+            .desk { 
+                width: 22px; 
+                height: 22px; 
+                font-size: 9px; 
+                border-width: 1.5px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            #floorplan-img { 
+                max-height: 75vh;
+                max-width: 95vw;
+            }
+            .desk { 
+                width: 20px; 
+                height: 20px; 
+                font-size: 8px; 
+                border-width: 1px;
+            }
+        }
+        
+        .desk.edit-mode {
+            cursor: move;
+            box-shadow: 0 0 0 3px rgba(255,255,255,0.7), 0 2px 8px rgba(0,0,0,0.5);
+            z-index: 1000;
+        }
+        
+        /* Indikator za brisanje - ko je miza v načinu urejanja */
+        .desk.edit-mode::after {
+            content: "✕";
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background: var(--danger);
+            color: white;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: bold;
+            border: 1px solid white;
+            opacity: 0;
+            transition: opacity 0.2s;
+            pointer-events: none;
+        }
+        
+        /* Prikaži X samo ko je način urejanja in se premaknemo miško čez mizo */
+        .desk.edit-mode:hover::after {
+            opacity: 1;
+        }
+        
+        /* Za mobilne naprave - X je vedno viden v načinu urejanja (ker ni hoverja) */
+        @media (max-width: 768px) {
+            .desk.edit-mode::after {
+                opacity: 0.8;
+            }
+        }
+        
+        .desk:active { transform: translate(-50%, -50%) scale(1.1); }
+        .free { background: var(--success); }
+        .occupied { background: var(--warning); }
+        .permanent { background: var(--danger); }
+        .pilot { background: var(--pilot); }
 
-#modal {
-    display: none;
-    position: fixed;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    background: rgba(0,0,0,0.5);
-    align-items: center;
-    justify-content: center;
-}
+        #legenda { 
+            position: fixed; top: 80px; left: 10px; 
+            background: white; padding: 8px 12px; border-radius: 20px; 
+            display: flex; gap: 10px; font-size: 10px; z-index: 1000; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3); border: 1px solid #ddd;
+            cursor: move; touch-action: none;
+            user-select: none;
+        }
+        .leg-item { display: flex; align-items: center; gap: 4px; pointer-events: none; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; }
 
-#modalContent {
-    background: white;
-    padding: 20px;
-    border-radius: 10px;
-    width: 300px;
-    text-align: left;
-}
-</style>
+        /* Gumb za dodajanje nove mize */
+        #add-desk-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: var(--primary);
+            color: white;
+            border: none;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            font-size: 24px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 1001;
+            transition: transform 0.2s;
+        }
+        
+        #add-desk-btn:hover {
+            transform: scale(1.1);
+        }
+        
+        #add-desk-btn.show {
+            display: flex;
+        }
+
+        #modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 2000; align-items: flex-end; }
+        #modal-content { 
+            background: white; width: 100%; border-radius: 25px 25px 0 0; 
+            padding: 20px; max-height: 90vh; overflow-y: auto; animation: slideUp 0.3s ease-out;
+        }
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+        
+        #mini-calendar-container { background: #f5f7fa; border-radius: 15px; padding: 15px; margin-bottom: 15px; }
+        .calendar-day-occupied { background: var(--warning) !important; color: black !important; border-radius: 50% !important; }
+        .calendar-day-permanent { background: var(--danger) !important; color: white !important; border-radius: 50% !important; }
+        .calendar-day-pilot { background: var(--pilot) !important; color: white !important; border-radius: 50% !important; }
+
+        #day-info-panel { background: #eef2f7; border-radius: 12px; padding: 15px; margin: 15px 0; display: none; }
+        .day-info-title { font-size: 14px; color: #666; margin-bottom: 5px; }
+        .day-info-content { font-size: 18px; font-weight: bold; margin-bottom: 10px; }
+        .day-info-actions { display: flex; gap: 10px; }
+        .btn-release { flex: 2; background: var(--danger); color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        .btn-close-info { flex: 1; background: #ccc; border: none; border-radius: 8px; cursor: pointer; }
+
+        .action-buttons { display: flex; gap: 10px; margin: 10px 0; flex-wrap: wrap; }
+        
+        .flatpickr-day.disabled {
+            background: #ffcccc !important;
+            color: #999 !important;
+            text-decoration: line-through;
+            cursor: not-allowed;
+            border-color: #ff9999 !important;
+        }
+        
+        .flatpickr-day.disabled:hover {
+            background: #ffbbbb !important;
+        }
+    </style>
 </head>
 <body>
 
-<h1>Sistem rezervacije miz</h1>
-
-<div id="controls">
-    <button onclick="toggleEditMode()">Uredi postavitev</button>
+<div id="app-wrapper">
+    <div id="admin-panel">
+        <div class="logo-area">
+            <img src="STIK_logo.png" alt="STIK logo">
+            <span>Razpored miz</span>
+        </div>
+        <button id="editToggle" onclick="toggleEdit()" style="padding: 8px 16px; border-radius: 20px; border:none; background: #333; color:white; font-size: 13px; font-weight: bold; cursor: pointer; white-space: nowrap;">
+            <i class="fas fa-pencil-alt"></i> UREDI MIZE
+        </button>
+    </div>
+    
+    <div id="floorplan-container">
+        <div id="floorplan-wrap">
+            <img src="tloris.png" id="floorplan-img" alt="Tloris">
+            <div id="desks-layer"></div>
+        </div>
+    </div>
 </div>
 
-<div id="floorplan">
-    <img src="tloris.png" alt="Tloris">
+<!-- Gumb za dodajanje nove mize -->
+<button id="add-desk-btn" onclick="addNewDesk()">
+    <i class="fas fa-plus"></i>
+</button>
+
+<div id="legenda">
+    <i class="fas fa-grip-vertical" style="color:#ccc; margin-right:5px;"></i>
+    <div class="leg-item"><div class="dot" style="background:var(--success)"></div> Prosto</div>
+    <div class="leg-item"><div class="dot" style="background:var(--warning)"></div> Rez.</div>
+    <div class="leg-item"><div class="dot" style="background:var(--danger)"></div> Stal.</div>
+    <div class="leg-item"><div class="dot" style="background:var(--pilot)"></div> Letalci</div>
 </div>
 
-<div id="modal">
-    <div id="modalContent">
-        <h3 id="deskTitle"></h3>
-        <p id="deskInfo"></p>
+<div id="modal-overlay">
+    <div id="modal-content">
+        <div class="modal-header">
+            <h2 id="mTitle">Miza</h2>
+            <button onclick="closeModal()" style="border:none; background:none; font-size:24px;">&times;</button>
+        </div>
 
-        <label>Ime:</label><br>
-        <input type="text" id="name"><br><br>
+        <div id="mini-calendar-container">
+            <div id="mini-calendar"></div>
+        </div>
+        
+        <div id="day-info-panel">
+            <div class="day-info-title">Izbrani dan:</div>
+            <div class="day-info-content" id="selected-day-date"></div>
+            <div class="day-info-title">Status:</div>
+            <div class="day-info-content" id="selected-day-name"></div>
+            <div class="day-info-actions" id="day-info-actions"></div>
+        </div>
 
-        <label>Od:</label><br>
-        <input type="date" id="dateFrom"><br><br>
+        <div class="action-buttons">
+            <button style="flex: 2; background: var(--primary); color: white; border: none; padding: 14px; border-radius: 10px; font-weight: bold;" onclick="showReservationForm()">
+                <i class="fas fa-plus"></i> NOVA REZERVACIJA
+            </button>
+            <button style="flex: 1; background: #eee; border: none; padding: 14px; border-radius: 10px; font-weight: bold;" onclick="showPermanentForm()">
+                <i class="fas fa-lock"></i> STALNA
+            </button>
+            <button style="flex: 1; background: var(--pilot); color: white; border: none; padding: 14px; border-radius: 10px; font-weight: bold;" onclick="showPilotForm()">
+                <i class="fas fa-plane"></i> LETALCI
+            </button>
+        </div>
 
-        <label>Do:</label><br>
-        <input type="date" id="dateTo"><br><br>
+        <div id="new-res-form" style="display: none; background: #f1f4f9; padding: 15px; border-radius: 15px; margin-top: 15px;">
+            <input type="text" id="uName" placeholder="Ime stranke" style="width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ccc; border-radius: 8px;">
+            <input type="text" id="uDates" placeholder="Izberi proste datume" style="width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ccc; border-radius: 8px;">
+            <div style="display: flex; gap: 10px;">
+                <button style="flex: 2; background: var(--primary); color: white; border: none; padding: 14px; border-radius: 10px; font-weight: bold;" onclick="save()">SHRANI</button>
+                <button style="flex: 1; background: #eee; border: none; padding: 14px; border-radius: 10px; font-weight: bold;" onclick="hideReservationForm()">PREKLIČI</button>
+            </div>
+        </div>
 
-        <button onclick="reserveDesk()">Rezerviraj</button>
-        <button onclick="cancelReservation()">Prekini rezervacijo</button>
-        <button onclick="closeModal()">Zapri</button>
+        <div id="permanent-form" style="display: none; background: #f1f4f9; padding: 15px; border-radius: 15px; margin-top: 15px;">
+            <input type="text" id="permName" placeholder="Ime za stalno mizo" style="width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ccc; border-radius: 8px;">
+            <div style="display: flex; gap: 10px;">
+                <button style="flex: 2; background: var(--primary); color: white; border: none; padding: 14px; border-radius: 10px; font-weight: bold;" onclick="savePermanent()">SHRANI STALNO</button>
+                <button style="flex: 1; background: #eee; border: none; padding: 14px; border-radius: 10px; font-weight: bold;" onclick="hidePermanentForm()">PREKLIČI</button>
+            </div>
+        </div>
+
+        <div id="pilot-form" style="display: none; background: #f1f4f9; padding: 15px; border-radius: 15px; margin-top: 15px;">
+            <input type="text" id="pilotName" placeholder="Ime letalca" style="width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ccc; border-radius: 8px;">
+            <div style="display: flex; gap: 10px;">
+                <button style="flex: 2; background: var(--pilot); color: white; border: none; padding: 14px; border-radius: 10px; font-weight: bold;" onclick="savePilot()">SHRANI LETALCA</button>
+                <button style="flex: 1; background: #eee; border: none; padding: 14px; border-radius: 10px; font-weight: bold;" onclick="hidePilotForm()">PREKLIČI</button>
+            </div>
+        </div>
+
+        <button style="width: 100%; padding: 14px; border-radius: 10px; border: none; background: var(--danger); color: white; font-weight: bold; margin-top: 20px; opacity: 0.8;" onclick="deleteEntireDesk()">
+            <i class="fas fa-trash"></i> IZBRIŠI VSE PODATKE MIZE
+        </button>
     </div>
 </div>
 
 <script>
-const totalDesks = 22;
-let reservations = JSON.parse(localStorage.getItem("reservations")) || {};
-let positions = JSON.parse(localStorage.getItem("positions")) || {};
-let selectedDesk = null;
+const firebaseConfig = {
+    apiKey: "AIzaSyCHaxtFVmtaszzFXSJoBQDwIBkxWcexoqY",
+    authDomain: "stik-rezervacija-miz.firebaseapp.com",
+    databaseURL: "https://stik-rezervacija-miz-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "stik-rezervacija-miz",
+    storageBucket: "stik-rezervacija-miz.firebasestorage.app",
+    messagingSenderId: "611373796927",
+    appId: "1:611373796927:web:f36c7a6d9cff6ce4b5328a"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+let selectedId = null;
 let editMode = false;
 let draggedDesk = null;
+let draggedLegend = false;
+let reservations = {};
+let positions = {};
+let miniPicker = null;
+let selectedDateStr = null;
+let nextDeskId = 23; // Začnemo z 23, ker imamo že 22 miz
+let longPressTimer = null; // Timer za dolg pritisk
 
-const floorplan = document.getElementById("floorplan");
+const todayStr = new Date().toISOString().split('T')[0];
 
-function createDesks() {
-    for (let i = 1; i <= totalDesks; i++) {
-        const desk = document.createElement("div");
-        desk.classList.add("desk");
-        desk.dataset.id = i;
-        desk.innerText = i;
-
-        const pos = positions[i] || { top: 50 + i*5, left: 50 + i*5 };
-        desk.style.top = pos.top + "px";
-        desk.style.left = pos.left + "px";
-
-        desk.addEventListener("click", () => {
-            if (!editMode) openModal(i);
-        });
-
-        desk.addEventListener("mousedown", (e) => {
-            if (!editMode) return;
-            draggedDesk = desk;
-        });
-
-        floorplan.appendChild(desk);
-    }
-}
-
-document.addEventListener("mousemove", (e) => {
-    if (!draggedDesk) return;
-
-    const rect = floorplan.getBoundingClientRect();
-    draggedDesk.style.left = (e.clientX - rect.left - 20) + "px";
-    draggedDesk.style.top = (e.clientY - rect.top - 20) + "px";
+const inputPicker = flatpickr("#uDates", {
+    mode: "multiple",
+    dateFormat: "Y-m-d",
+    minDate: "today",
+    locale: "sl",
+    disable: []
 });
 
-document.addEventListener("mouseup", () => {
-    if (draggedDesk) {
-        positions[draggedDesk.dataset.id] = {
-            top: parseInt(draggedDesk.style.top),
-            left: parseInt(draggedDesk.style.left)
+db.ref('positions').on('value', s => { 
+    positions = s.val() || {}; 
+    // Poiščemo najvišjo številko mize za nextDeskId
+    const deskNumbers = Object.keys(positions).map(Number);
+    if (deskNumbers.length > 0) {
+        nextDeskId = Math.max(...deskNumbers) + 1;
+    }
+    renderDesks(); 
+});
+
+db.ref('reservations').on('value', s => { 
+    reservations = s.val() || {}; 
+    updateStatus(); 
+    
+    if (selectedId && miniPicker) {
+        miniPicker.destroy();
+        miniPicker = flatpickr("#mini-calendar", {
+            inline: true, 
+            locale: "sl", 
+            minDate: "today",
+            onChange: (dates) => { 
+                if(dates.length) {
+                    showDayInfo(dates[0].toISOString().split('T')[0]); 
+                }
+            },
+            onDayCreate: (dObj, dStr, fp, dayElem) => {
+                const d = dayElem.dateObj.toISOString().split('T')[0];
+                const res = reservations[selectedId] || {};
+                if(res.isPilot) {
+                    dayElem.classList.add("calendar-day-pilot");
+                } else if(res.isPermanent) {
+                    dayElem.classList.add("calendar-day-permanent");
+                } else if(res.bookings && res.bookings[d]) {
+                    dayElem.classList.add("calendar-day-occupied");
+                }
+            }
+        });
+    }
+    
+    if (selectedId) {
+        updateDisabledDates();
+    }
+});
+
+function renderDesks() {
+    const layer = document.getElementById("desks-layer");
+    layer.innerHTML = "";
+    
+    // Uredimo številke miz za lepši prikaz
+    const deskIds = Object.keys(positions).map(Number).sort((a, b) => a - b);
+    
+    deskIds.forEach(id => {
+        const p = positions[id];
+        const div = document.createElement("div");
+        div.className = "desk free" + (editMode ? " edit-mode" : "");
+        div.id = "d-" + id;
+        div.innerText = id;
+        div.style.top = p.top + "%";
+        div.style.left = p.left + "%";
+        div.setAttribute('data-desk-id', id);
+        
+        // Mouse events za namizne računalnike
+        div.onmousedown = (e) => { 
+            if(editMode) {
+                draggedDesk = id; 
+                e.stopPropagation();
+            }
         };
-        localStorage.setItem("positions", JSON.stringify(positions));
+        
+        // Touch events za mobilne naprave
+        div.ontouchstart = (e) => { 
+            if(editMode) {
+                // Začnemo timer za dolg pritisk
+                longPressTimer = setTimeout(() => {
+                    deleteDesk(id);
+                    longPressTimer = null;
+                }, 500); // 500ms dolg pritisk
+                
+                draggedDesk = id; 
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        };
+        
+        div.ontouchend = (e) => {
+            if(editMode && longPressTimer) {
+                clearTimeout(longPressTimer);
+                longPressTimer = null;
+            }
+        };
+        
+        div.ontouchmove = (e) => {
+            if(editMode && longPressTimer) {
+                clearTimeout(longPressTimer);
+                longPressTimer = null;
+            }
+        };
+        
+        div.ontouchcancel = (e) => {
+            if(editMode && longPressTimer) {
+                clearTimeout(longPressTimer);
+                longPressTimer = null;
+            }
+        };
+        
+        // Desni klik za namizne računalnike
+        div.oncontextmenu = (e) => {
+            if(editMode) {
+                e.preventDefault();
+                deleteDesk(id);
+            }
+        };
+        
+        // Klik za odpiranje modala (samo če ni v načinu urejanja)
+        div.onclick = (e) => { 
+            if(!editMode) {
+                openModal(id); 
+                e.stopPropagation(); 
+            }
+        };
+        
+        layer.appendChild(div);
+    });
+    updateStatus();
+    
+    // Prikaži/skrij gumb za dodajanje
+    const addBtn = document.getElementById("add-desk-btn");
+    if(editMode) {
+        addBtn.classList.add("show");
+    } else {
+        addBtn.classList.remove("show");
     }
-    draggedDesk = null;
-});
-
-function toggleEditMode() {
-    editMode = !editMode;
-    alert(editMode ? "Edit mode VKLOPLJEN" : "Edit mode IZKLOPLJEN");
 }
 
-function getStatusClass(reservation) {
-    if (!reservation) return "free";
-    const from = new Date(reservation.from);
-    const to = new Date(reservation.to);
-    const diffDays = (to - from) / (1000*60*60*24) + 1;
-    if (diffDays === 1) return "daily";
-    if (diffDays <= 14) return "temporary";
-    return "long";
-}
-
-function renderStatuses() {
-    document.querySelectorAll(".desk").forEach(desk => {
-        const id = desk.dataset.id;
-        desk.classList.remove("free","daily","temporary","long");
-        desk.classList.add(getStatusClass(reservations[id]));
+function updateStatus() {
+    // Uporabimo obstoječe ID-je iz positions
+    Object.keys(positions).forEach(id => {
+        const el = document.getElementById("d-" + id);
+        if(!el) return;
+        const res = reservations[id];
+        el.classList.remove('free', 'occupied', 'permanent', 'pilot');
+        if(res) {
+            if(res.isPilot) {
+                el.classList.add('pilot');
+            } else if(res.isPermanent) {
+                el.classList.add('permanent');
+            } else if(res.bookings && Object.keys(res.bookings).some(d => d >= todayStr)) {
+                el.classList.add('occupied');
+            } else {
+                el.classList.add('free');
+            }
+        } else {
+            el.classList.add('free');
+        }
     });
 }
 
+// Nova funkcija za dodajanje mize
+function addNewDesk() {
+    const newId = nextDeskId++;
+    
+    // Privzeta pozicija (sredina zaslona)
+    const defaultTop = 50;
+    const defaultLeft = 50;
+    
+    positions[newId] = { top: defaultTop, left: defaultLeft };
+    
+    // Shranimo v Firebase
+    db.ref('positions/' + newId).set({ top: defaultTop, left: defaultLeft })
+        .then(() => {
+            renderDesks();
+        });
+}
+
+// Nova funkcija za brisanje mize
+function deleteDesk(deskId) {
+    if(confirm(`Ali res želite izbrisati mizo ${deskId}?`)) {
+        // Izbrišemo pozicijo
+        db.ref('positions/' + deskId).remove();
+        
+        // Izbrišemo tudi morebitne rezervacije za to mizo
+        db.ref('reservations/' + deskId).remove();
+        
+        // Počistimo iz lokalnega objekta
+        delete positions[deskId];
+        
+        renderDesks();
+    }
+}
+
+const handleMove = (e) => {
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+    if (draggedDesk) {
+        const wrap = document.getElementById("floorplan-wrap");
+        const rect = wrap.getBoundingClientRect();
+        let x = ((clientX - rect.left) / rect.width) * 100;
+        let y = ((clientY - rect.top) / rect.height) * 100;
+        x = Math.max(0, Math.min(100, x));
+        y = Math.max(0, Math.min(100, y));
+
+        const el = document.getElementById("d-" + draggedDesk);
+        if(el) {
+            el.style.left = x + "%";
+            el.style.top = y + "%";
+            positions[draggedDesk] = { top: y, left: x };
+        }
+    }
+    if (draggedLegend) {
+        const leg = document.getElementById("legenda");
+        leg.style.left = clientX - 60 + "px";
+        leg.style.top = clientY - 20 + "px";
+    }
+};
+
+document.addEventListener("mousemove", handleMove);
+document.addEventListener("touchmove", (e) => { 
+    if(draggedDesk || draggedLegend) {
+        e.preventDefault(); 
+        handleMove(e);
+    }
+}, { passive: false });
+
+const stopDragging = () => {
+    if(draggedDesk) {
+        db.ref('positions/' + draggedDesk).set(positions[draggedDesk]);
+        draggedDesk = null;
+    }
+    draggedLegend = false;
+};
+
+document.addEventListener("mouseup", stopDragging);
+document.addEventListener("touchend", stopDragging);
+
+document.getElementById("legenda").onmousedown = () => draggedLegend = true;
+document.getElementById("legenda").ontouchstart = (e) => {
+    draggedLegend = true;
+    e.preventDefault();
+};
+
+function toggleEdit() {
+    editMode = !editMode;
+    const btn = document.getElementById("editToggle");
+    btn.style.background = editMode ? "var(--danger)" : "#333";
+    btn.innerHTML = editMode ? '<i class="fas fa-check"></i> KONČAJ UREJANJE' : '<i class="fas fa-pencil-alt"></i> UREDI MIZE';
+    renderDesks();
+}
+
 function openModal(id) {
-    selectedDesk = id;
-    const reservation = reservations[id];
+    selectedId = id;
+    document.getElementById("mTitle").innerText = "Miza " + id;
+    document.getElementById("modal-overlay").style.display = "flex";
+    
+    hideReservationForm(); 
+    hidePermanentForm(); 
+    hidePilotForm();
+    hideDayInfo();
 
-    document.getElementById("deskTitle").innerText = "Miza " + id;
-    document.getElementById("deskInfo").innerText = reservation
-        ? "Rezerviral: " + reservation.name + "\nOd: " + reservation.from + "\nDo: " + reservation.to
-        : "Miza je prosta.";
+    updateDisabledDates();
+    inputPicker.clear();
 
-    document.getElementById("modal").style.display = "flex";
+    if(miniPicker) miniPicker.destroy();
+    miniPicker = flatpickr("#mini-calendar", {
+        inline: true, 
+        locale: "sl", 
+        minDate: "today",
+        onChange: (dates) => { 
+            if(dates.length) {
+                showDayInfo(dates[0].toISOString().split('T')[0]); 
+            }
+        },
+        onDayCreate: (dObj, dStr, fp, dayElem) => {
+            const d = dayElem.dateObj.toISOString().split('T')[0];
+            const res = reservations[selectedId] || {};
+            if(res.isPilot) {
+                dayElem.classList.add("calendar-day-pilot");
+            } else if(res.isPermanent) {
+                dayElem.classList.add("calendar-day-permanent");
+            } else if(res.bookings && res.bookings[d]) {
+                dayElem.classList.add("calendar-day-occupied");
+            }
+        }
+    });
 }
 
-function closeModal() {
-    document.getElementById("modal").style.display = "none";
+function updateDisabledDates() {
+    const res = reservations[selectedId] || { bookings: {} };
+    let disabledDates = [];
+    
+    if (res.isPermanent || res.isPilot) {
+        const nextYear = new Date();
+        nextYear.setFullYear(nextYear.getFullYear() + 1);
+        disabledDates = [{ from: todayStr, to: nextYear.toISOString().split('T')[0] }];
+    } else if (res.bookings) {
+        Object.keys(res.bookings).forEach(dateStr => {
+            if (dateStr >= todayStr) {
+                disabledDates.push(new Date(dateStr));
+            }
+        });
+    }
+    
+    inputPicker.set("disable", disabledDates);
 }
 
-function reserveDesk() {
-    const name = document.getElementById("name").value;
-    const from = document.getElementById("dateFrom").value;
-    const to = document.getElementById("dateTo").value;
+function showReservationForm() { 
+    document.getElementById("new-res-form").style.display = "block"; 
+    document.getElementById("permanent-form").style.display = "none";
+    document.getElementById("pilot-form").style.display = "none";
+    hideDayInfo(); 
+    updateDisabledDates();
+}
 
-    if (!name || !from || !to) {
-        alert("Izpolni vsa polja!");
+function showPermanentForm() { 
+    document.getElementById("permanent-form").style.display = "block"; 
+    document.getElementById("new-res-form").style.display = "none";
+    document.getElementById("pilot-form").style.display = "none";
+    hideDayInfo(); 
+    updateDisabledDates();
+}
+
+function showPilotForm() {
+    document.getElementById("pilot-form").style.display = "block"; 
+    document.getElementById("new-res-form").style.display = "none";
+    document.getElementById("permanent-form").style.display = "none";
+    hideDayInfo(); 
+    updateDisabledDates();
+}
+
+function showDayInfo(dateStr) {
+    selectedDateStr = dateStr;
+    const res = reservations[selectedId] || {};
+    document.getElementById("selected-day-date").innerText = dateStr;
+    let status = "Prosto";
+    let actions = `<button class="btn-close-info" onclick="hideDayInfo()">Zapri</button>`;
+    
+    if(res && res.isPilot) {
+        status = "LETALEC: " + (res.name || "Neznano");
+        actions = `<button class="btn-release" onclick="releaseSelectedDay()">Odstrani letalca</button>
+                   <button class="btn-close-info" onclick="hideDayInfo()">Zapri</button>`;
+    } else if(res && res.isPermanent) {
+        status = "STALNO ZASEDENO: " + (res.name || "Neznano");
+        actions = `<button class="btn-release" onclick="releaseSelectedDay()">Odstrani stalno</button>
+                   <button class="btn-close-info" onclick="hideDayInfo()">Zapri</button>`;
+    } else if(res && res.bookings && res.bookings[dateStr]) {
+        status = "Rezervirano: " + res.bookings[dateStr];
+        actions = `<button class="btn-release" onclick="releaseSelectedDay()">Sprosti dan</button>
+                   <button class="btn-close-info" onclick="hideDayInfo()">Zapri</button>`;
+    }
+    document.getElementById("selected-day-name").innerText = status;
+    document.getElementById("day-info-actions").innerHTML = actions;
+    document.getElementById("day-info-panel").style.display = "block";
+}
+
+function releaseSelectedDay() {
+    if (!selectedId || !selectedDateStr) return;
+    
+    const res = JSON.parse(JSON.stringify(reservations[selectedId] || {}));
+    
+    if (res.isPilot || res.isPermanent) {
+        db.ref('reservations/' + selectedId).remove();
+        closeModal();
+    } else {
+        if (res.bookings && res.bookings[selectedDateStr]) {
+            delete res.bookings[selectedDateStr];
+            
+            if (Object.keys(res.bookings).length === 0) {
+                db.ref('reservations/' + selectedId).remove();
+                closeModal();
+            } else {
+                db.ref('reservations/' + selectedId).set(res);
+                setTimeout(() => {
+                    const currentId = selectedId;
+                    closeModal();
+                    setTimeout(() => {
+                        openModal(currentId);
+                    }, 100);
+                }, 200);
+            }
+        } else {
+            hideDayInfo();
+        }
+    }
+}
+
+function save() {
+    const name = document.getElementById("uName").value.trim();
+    const dates = inputPicker.selectedDates.map(d => d.toISOString().split('T')[0]);
+    
+    if(!name || !dates.length) {
+        alert("Vnesi ime in izberi datume!");
         return;
     }
-
-    reservations[selectedDesk] = { name, from, to };
-    localStorage.setItem("reservations", JSON.stringify(reservations));
-    renderStatuses();
+    
+    const res = reservations[selectedId] || { bookings: {} };
+    const existingBookings = res.bookings || {};
+    
+    for (let date of dates) {
+        if (existingBookings[date]) {
+            alert("Datum " + date + " je že zaseden!");
+            return;
+        }
+    }
+    
+    if (!res.bookings) res.bookings = {};
+    dates.forEach(d => {
+        if (d >= todayStr) {
+            res.bookings[d] = name;
+        }
+    });
+    
+    res.name = name;
+    res.isPermanent = false;
+    res.isPilot = false;
+    
+    db.ref('reservations/' + selectedId).set(res);
     closeModal();
 }
 
-function cancelReservation() {
-    delete reservations[selectedDesk];
-    localStorage.setItem("reservations", JSON.stringify(reservations));
-    renderStatuses();
+function savePermanent() {
+    const name = document.getElementById("permName").value.trim();
+    if(!name) {
+        alert("Vnesi ime!");
+        return;
+    }
+    
+    const res = reservations[selectedId];
+    if (res && (res.isPermanent || res.isPilot || (res.bookings && Object.keys(res.bookings).length > 0))) {
+        alert("Ta miza je že zasedena! Najprej sprosti vse dni.");
+        return;
+    }
+    
+    db.ref('reservations/' + selectedId).set({ 
+        name: name, 
+        isPermanent: true,
+        isPilot: false 
+    });
     closeModal();
 }
 
-createDesks();
-renderStatuses();
+function savePilot() {
+    const name = document.getElementById("pilotName").value.trim();
+    if(!name) {
+        alert("Vnesi ime letalca!");
+        return;
+    }
+    
+    const res = reservations[selectedId];
+    if (res && (res.isPermanent || res.isPilot || (res.bookings && Object.keys(res.bookings).length > 0))) {
+        alert("Ta miza je že zasedena! Najprej sprosti vse dni.");
+        return;
+    }
+    
+    db.ref('reservations/' + selectedId).set({ 
+        name: name, 
+        isPilot: true,
+        isPermanent: false 
+    });
+    closeModal();
+}
+
+function hideDayInfo() { 
+    document.getElementById("day-info-panel").style.display = "none"; 
+}
+
+function hideReservationForm() { 
+    document.getElementById("new-res-form").style.display = "none"; 
+}
+
+function hidePermanentForm() { 
+    document.getElementById("permanent-form").style.display = "none"; 
+}
+
+function hidePilotForm() {
+    document.getElementById("pilot-form").style.display = "none"; 
+}
+
+function closeModal() { 
+    document.getElementById("modal-overlay").style.display = "none"; 
+    selectedId = null;
+    selectedDateStr = null;
+    hideDayInfo();
+}
+
+function deleteEntireDesk() { 
+    if(confirm("Izbrišem vse podatke za to mizo?")) { 
+        db.ref('reservations/' + selectedId).remove(); 
+        closeModal(); 
+    } 
+}
 </script>
-
 </body>
 </html>
